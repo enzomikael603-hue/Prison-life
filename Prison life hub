@@ -1,0 +1,272 @@
+--// Prison Life Hub - FULL VERSION (AIMBOT MOBILE + PC FIX)
+--// Author: ChatGPT 😈
+--// COPY & RUN
+
+-- SERVICES
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local mouse = player:GetMouse()
+
+-- CONFIG
+local SCRIPT_NAME = "Prison Life Hub"
+local TOGGLE_KEY = Enum.KeyCode.RightShift
+
+-- AIM CONFIG
+local AIM_ENABLED = false
+local TRIGGERBOT = false
+local TEAM_CHECK = true
+local AIM_PART = "Head"
+local AIM_FOV = 220
+local AIM_SMOOTH = 0.35
+local LOCKED_TARGET = nil
+
+-- INPUT CONFIG (🔥 FIX)
+local DEADZONE = 8
+local inputDelta = Vector2.new(0,0)
+
+-- GUI
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.Name = "PrisonLifeHub"
+gui.ResetOnSpawn = false
+
+-- ===== WELCOME =====
+local welcome = Instance.new("Frame", gui)
+welcome.Size = UDim2.fromScale(0.3, 0.15)
+welcome.Position = UDim2.fromScale(0.35, 0.4)
+welcome.BackgroundColor3 = Color3.fromRGB(30,30,30)
+welcome.BackgroundTransparency = 0.15
+Instance.new("UICorner", welcome).CornerRadius = UDim.new(0,16)
+
+local wl = Instance.new("TextLabel", welcome)
+wl.Size = UDim2.fromScale(1,1)
+wl.BackgroundTransparency = 1
+wl.Text = "Welcome to\n"..SCRIPT_NAME
+wl.Font = Enum.Font.GothamBold
+wl.TextSize = 26
+wl.TextColor3 = Color3.fromRGB(220,220,220)
+
+task.delay(3,function()
+	welcome:Destroy()
+end)
+
+-- ===== MAIN =====
+local main = Instance.new("Frame", gui)
+main.Size = UDim2.fromScale(0.55,0.55)
+main.Position = UDim2.fromScale(0.22,0.22)
+main.BackgroundColor3 = Color3.fromRGB(28,28,28)
+main.BackgroundTransparency = 0.12
+main.Visible = false
+main.Active = true
+main.Draggable = true
+Instance.new("UICorner", main).CornerRadius = UDim.new(0,18)
+
+local title = Instance.new("TextLabel", main)
+title.Size = UDim2.new(1,0,0,50)
+title.BackgroundTransparency = 1
+title.Text = SCRIPT_NAME
+title.Font = Enum.Font.GothamBold
+title.TextSize = 24
+title.TextColor3 = Color3.fromRGB(230,230,230)
+
+-- TAB BAR
+local tabBar = Instance.new("ScrollingFrame", main)
+tabBar.Size = UDim2.new(0,140,1,-60)
+tabBar.Position = UDim2.new(0,0,0,55)
+tabBar.AutomaticCanvasSize = Enum.AutomaticSize.Y
+tabBar.ScrollBarImageTransparency = 1
+tabBar.BackgroundTransparency = 1
+
+local tabLayout = Instance.new("UIListLayout", tabBar)
+tabLayout.Padding = UDim.new(0,6)
+
+-- CONTENT
+local content = Instance.new("Frame", main)
+content.Size = UDim2.new(1,-150,1,-60)
+content.Position = UDim2.new(0,145,0,55)
+content.BackgroundTransparency = 1
+
+local tabs = {"Prison Life","Movement","Visual","Misc"}
+local pages, states, connections = {}, {}, {}
+
+local function createButton(parent,text)
+	local b = Instance.new("TextButton", parent)
+	b.Size = UDim2.new(1,-4,0,36)
+	b.Text = text
+	b.Font = Enum.Font.Gotham
+	b.TextSize = 14
+	b.TextColor3 = Color3.fromRGB(220,220,220)
+	b.BackgroundColor3 = Color3.fromRGB(40,40,40)
+	Instance.new("UICorner", b).CornerRadius = UDim.new(0,12)
+	return b
+end
+
+local function getChar()
+	return player.Character or player.CharacterAdded:Wait()
+end
+
+-- CREATE TABS
+for _,name in ipairs(tabs) do
+	local tabBtn = createButton(tabBar,name)
+
+	local page = Instance.new("ScrollingFrame", content)
+	page.Size = UDim2.fromScale(1,1)
+	page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	page.ScrollBarImageTransparency = 1
+	page.Visible = false
+	page.BackgroundTransparency = 1
+
+	Instance.new("UIListLayout", page).Padding = UDim.new(0,8)
+	pages[name] = page
+
+	tabBtn.MouseButton1Click:Connect(function()
+		for _,p in pairs(pages) do p.Visible = false end
+		page.Visible = true
+	end)
+end
+
+-- FEATURES
+local features = {
+	["Prison Life"] = {"Aimbot","Triggerbot","Team Check","Aim Head","Aim Torso"},
+	["Movement"] = {"WalkSpeed","JumpPower"},
+	["Visual"] = {"Full Bright","Custom FOV"},
+	["Misc"] = {"Anti AFK","Rejoin","Unload"}
+}
+
+-- TEAM CHECK
+local function sameTeam(plr)
+	if not TEAM_CHECK then return false end
+	if not plr.Team or not player.Team then return false end
+	return plr.Team == player.Team
+end
+
+-- TARGET FIND
+local function getClosestTarget()
+	local closest, shortest = nil, AIM_FOV
+	for _,plr in ipairs(Players:GetPlayers()) do
+		if plr ~= player and plr.Character and plr.Character:FindFirstChild(AIM_PART) then
+			if not sameTeam(plr) then
+				local part = plr.Character[AIM_PART]
+				local pos, vis = camera:WorldToViewportPoint(part.Position)
+				if vis then
+					local dist = (Vector2.new(pos.X,pos.Y)-Vector2.new(mouse.X,mouse.Y)).Magnitude
+					if dist < shortest then
+						shortest = dist
+						closest = part
+					end
+				end
+			end
+		end
+	end
+	return closest
+end
+
+-- TRIGGERBOT
+local function triggerFire()
+	mouse1press()
+	task.wait(0.04)
+	mouse1release()
+end
+
+-- 🔥 INPUT FIX (PC + MOBILE)
+RunService.RenderStepped:Connect(function()
+	if UIS.MouseEnabled then
+		inputDelta = UIS:GetMouseDelta()
+	end
+end)
+
+UIS.TouchMoved:Connect(function(touch, gpe)
+	if gpe then return end
+	inputDelta = touch.Delta
+end)
+
+-- 🔥 AIM LOOP FIXED (FINAL)
+connections.aim = RunService.RenderStepped:Connect(function()
+	if not AIM_ENABLED then
+		LOCKED_TARGET = nil
+		return
+	end
+
+	-- solta alvo se mover mouse ou dedo
+	if math.abs(inputDelta.X) > DEADZONE or math.abs(inputDelta.Y) > DEADZONE then
+		LOCKED_TARGET = nil
+	end
+
+	if not LOCKED_TARGET or not LOCKED_TARGET.Parent then
+		LOCKED_TARGET = getClosestTarget()
+	end
+
+	if LOCKED_TARGET then
+		local camPos = camera.CFrame.Position
+		camera.CFrame = camera.CFrame:Lerp(
+			CFrame.new(camPos, LOCKED_TARGET.Position),
+			AIM_SMOOTH
+		)
+
+		if TRIGGERBOT then
+			triggerFire()
+		end
+	end
+end)
+
+-- ACTIONS
+local actions = {
+	["Aimbot"] = function(on) AIM_ENABLED = on end,
+	["Triggerbot"] = function(on) TRIGGERBOT = on end,
+	["Team Check"] = function(on) TEAM_CHECK = on end,
+	["Aim Head"] = function(on) if on then AIM_PART="Head" LOCKED_TARGET=nil end end,
+	["Aim Torso"] = function(on) if on then AIM_PART="HumanoidRootPart" LOCKED_TARGET=nil end end,
+
+	["WalkSpeed"] = function(on) getChar().Humanoid.WalkSpeed = on and 32 or 16 end,
+	["JumpPower"] = function(on) getChar().Humanoid.JumpPower = on and 80 or 50 end,
+
+	["Full Bright"] = function(on) Lighting.Brightness = on and 3 or 1 end,
+	["Custom FOV"] = function(on) camera.FieldOfView = on and 90 or 70 end,
+
+	["Anti AFK"] = function(on)
+		if on then
+			connections.afk = player.Idled:Connect(function()
+				VirtualUser:Button2Down(Vector2.new(),camera.CFrame)
+				task.wait(1)
+				VirtualUser:Button2Up(Vector2.new(),camera.CFrame)
+			end)
+		elseif connections.afk then
+			connections.afk:Disconnect()
+		end
+	end,
+
+	["Rejoin"] = function() TeleportService:Teleport(game.PlaceId,player) end,
+	["Unload"] = function() gui:Destroy() end
+}
+
+-- BUILD BUTTONS
+for tab,items in pairs(features) do
+	for _,name in ipairs(items) do
+		local b = createButton(pages[tab],name)
+		states[name] = false
+		b.MouseButton1Click:Connect(function()
+			states[name] = not states[name]
+			b.TextColor3 = states[name] and Color3.fromRGB(0,255,120) or Color3.fromRGB(220,220,220)
+			if actions[name] then actions[name](states[name]) end
+		end)
+	end
+end
+
+pages["Prison Life"].Visible = true
+
+UIS.InputBegan:Connect(function(i,g)
+	if not g and i.KeyCode == TOGGLE_KEY then
+		main.Visible = not main.Visible
+	end
+end)
+
+task.delay(3,function()
+	main.Visible = true
+end)
